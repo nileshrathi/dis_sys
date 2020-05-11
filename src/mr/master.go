@@ -1,15 +1,25 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+)
 
+type task_staus struct {
+	Type  int //map =1 reduce =2
+	state int //not started =0 running=1 completed=2
+}
 
 type Master struct {
 	// Your definitions here.
-
+	file_names           []string
+	nReduce              int
+	nMap                 int
+	map_task_assigned    []bool
+	reduce_task_assigned []bool
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -24,6 +34,43 @@ func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
+var count int
+
+//yellow line hatao
+func (m *Master) GetArgs(args *ReqTaskArgs, reply *ReplyTaskArgs) error {
+	count++
+	if count == 1 {
+		for i := 0; i < len(m.map_task_assigned); i++ {
+			if m.map_task_assigned[i] == false {
+				reply.Type = 1
+				reply.Arg = m.file_names[i]
+				reply.Index = i
+				reply.NReduce = m.nReduce
+				m.map_task_assigned[i] = true
+				break
+			}
+
+		}
+	}
+
+	if count == 2 {
+		for i := 0; i < len(m.reduce_task_assigned); i++ {
+			if m.reduce_task_assigned[i] == false {
+				reply.Type = 2
+				reply.NReduce = m.nReduce
+				reply.NMap = m.nMap
+				reply.Index = i
+				break
+			}
+		}
+	}
+
+	if count == 3 {
+		reply.Type = 3
+	}
+
+	return nil
+}
 
 //
 // start a thread that listens for RPCs from worker.go
@@ -50,7 +97,6 @@ func (m *Master) Done() bool {
 
 	// Your code here.
 
-
 	return ret
 }
 
@@ -61,9 +107,13 @@ func (m *Master) Done() bool {
 //
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
-
 	// Your code here.
 
+	m.file_names = files
+	m.nReduce = nReduce
+	m.nMap = len(files)
+	m.map_task_assigned = make([]bool, len(files))
+	m.reduce_task_assigned = make([]bool, nReduce)
 
 	m.server()
 	return &m

@@ -6,19 +6,22 @@ package main
 // go run mrsequential.go wc.so pg*.txt
 //
 
-import "fmt"
-import "../mr"
-import "plugin"
-import "os"
-import "log"
-import "io/ioutil"
-import "sort"
+import (
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"plugin"
+	"sort"
+
+	"../mr"
+)
 
 // for sorting by key.
 type ByKey []mr.KeyValue
 
 // for sorting by key.
-func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Len() int           { return len(a) } //interface in golang
 func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 
@@ -28,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mapf, reducef := loadPlugin(os.Args[1])
+	mapf, reducef := loadPlugin(os.Args[1]) //map and recuce function from wc.go available as plugin
 
 	//
 	// read each input file,
