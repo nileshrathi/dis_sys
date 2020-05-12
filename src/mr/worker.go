@@ -50,53 +50,34 @@ func Worker(mapf func(string, string) []KeyValue,
 	//CallExample()
 	for {
 		taskreply, error := get_args_from_master()
+		if error != nil {
+			log.Fatalf("could not get task %v\n", error)
+			continue
+		}
 		if taskreply.Type == 1 {
 			//map Task
 			result := runMap(mapf, taskreply.Arg, taskreply.Index, taskreply.NReduce)
 			if result == 0 {
 				fmt.Printf("Failed to perform map\n")
 			} else if result == 1 {
-				fmt.Printf("Map pahase executed succesfully\n")
+				//	fmt.Printf("Map pahase executed succesfully\n")
 			}
+			callTaskExecuted(1, taskreply.Index)
 		} else if taskreply.Type == 2 {
 			//Reduce Task
 			result := runReduce(reducef, taskreply.Index, taskreply.NReduce, taskreply.NMap)
 			if result == 0 {
 				fmt.Printf("Failed to perform Reduce\n")
 			} else if result == 1 {
-				fmt.Printf("Reduce performed successfully\n")
+				//	fmt.Printf("Reduce performed successfully\n")
 			}
+			callTaskExecuted(2, taskreply.Index)
 		} else if taskreply.Type == 3 {
-			fmt.Printf("MAP-REDUCE executed SUCCESSFULY")
+			//	fmt.Printf("MAP-REDUCE executed SUCCESSFULY")
 			break
 		}
 
-		fmt.Printf("reply parameters are %v %v %v", taskreply.Type, taskreply.Arg, error)
 	}
-
-}
-
-//
-// example function to show how to make an RPC call to the master.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func CallExample() {
-
-	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	call("Master.Example", &args, &reply)
-
-	// reply.Y should be 100.
-	fmt.Printf("reply.Y %v\n", reply.Y)
 
 }
 
@@ -107,6 +88,21 @@ func get_args_from_master() (ReplyTaskArgs, error) {
 	args.Index_of_file = -1
 	reply := ReplyTaskArgs{}
 	call("Master.GetArgs", &args, &reply)
+	return reply, nil
+}
+
+func callTaskExecuted(Type int, Index int) (Status, error) {
+	args := TaskExecuted{}
+	args.Type = Type
+	args.Index = Index
+	reply := Status{}
+	for i := 0; i < 10; i++ {
+		call("Master.TaskComplete", &args, &reply)
+		if reply.Status == 1 {
+			break
+		}
+	}
+
 	return reply, nil
 }
 

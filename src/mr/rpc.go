@@ -39,6 +39,15 @@ type ReplyTaskArgs struct {
 	NMap    int
 }
 
+type TaskExecuted struct {
+	Type  int
+	Index int
+}
+
+type Status struct {
+	Status int
+}
+
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the master.
 // Can't use the current directory since

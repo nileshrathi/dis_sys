@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 type task_staus struct {
@@ -18,55 +19,144 @@ type Master struct {
 	file_names           []string
 	nReduce              int
 	nMap                 int
-	map_task_assigned    []bool
-	reduce_task_assigned []bool
+	map_task_assigned    []int //0 not assigned 1 assigned 2 completed
+	reduce_task_assigned []int
+	mapComplete          bool
+	reduceComplete       bool
+	mapTaskTime          []time.Time
+	reduceTaskTime       []time.Time
 }
 
 // Your code here -- RPC handlers for the worker to call.
 
-//
-// an example RPC handler.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
-
-var count int
-
 //yellow line hatao
 func (m *Master) GetArgs(args *ReqTaskArgs, reply *ReplyTaskArgs) error {
-	count++
-	if count == 1 {
-		for i := 0; i < len(m.map_task_assigned); i++ {
-			if m.map_task_assigned[i] == false {
+
+	if !m.mapComplete {
+		//get the map task
+		for i := 0; i < m.nMap; i++ {
+			t1 := time.Now()
+			if m.map_task_assigned[i] == 0 || (m.map_task_assigned[i] == 1 && t1.Sub(m.mapTaskTime[i]).Seconds() > 10) {
+				m.map_task_assigned[i] = 1
+				m.mapTaskTime[i] = time.Now()
 				reply.Type = 1
 				reply.Arg = m.file_names[i]
 				reply.Index = i
 				reply.NReduce = m.nReduce
-				m.map_task_assigned[i] = true
-				break
+				return nil
 			}
 
 		}
 	}
 
-	if count == 2 {
-		for i := 0; i < len(m.reduce_task_assigned); i++ {
-			if m.reduce_task_assigned[i] == false {
+	if m.mapComplete && !m.reduceComplete {
+		for i := 0; i < m.nReduce; i++ {
+			t1 := time.Now()
+			if m.reduce_task_assigned[i] == 0 || (m.reduce_task_assigned[i] == 1 && t1.Sub(m.reduceTaskTime[i]).Seconds() > 10) {
+				m.reduce_task_assigned[i] = 1
+				m.reduceTaskTime[i] = time.Now()
 				reply.Type = 2
+				reply.Index = i
 				reply.NReduce = m.nReduce
 				reply.NMap = m.nMap
-				reply.Index = i
+				return nil
+			}
+		}
+
+	}
+
+	if m.mapComplete && m.reduceComplete {
+		reply.Type = 3
+		return nil
+	}
+	return nil
+
+	// for reduceCount !=m. {
+	// 	if m.reduce_task_assigned[i] == false {
+	// 		reply.Type = 2
+	// 		reply.NReduce = m.nReduce
+	// 		reply.NMap = m.nMap
+	// 		reply.Index = i
+	// 		break
+	// 	}
+	// }
+
+	return nil
+}
+
+//need to handle concurrent calls to TaskComplete ans get Args
+func (m *Master) TaskComplete(args *TaskExecuted, reply *Status) error {
+	if args.Type == 1 {
+		//Map task
+		//check if task is completed in desired time
+		//if  not then mark task unassigned
+		mapTaskIndex := args.Index
+		t1 := time.Now()
+		t2 := m.mapTaskTime[mapTaskIndex]
+		diff := t1.Sub(t2).Seconds()
+		currStatus := m.map_task_assigned[mapTaskIndex]
+
+		if currStatus != 2 {
+			if diff <= 10 {
+				m.map_task_assigned[mapTaskIndex] = 2
+				reply.Status = 1
+			} else {
+				m.map_task_assigned[mapTaskIndex] = 0
+			}
+		} else {
+			//Already done
+			reply.Status = 1
+		}
+		//check if it was the last map task
+		count := 0
+		for i := 0; i < m.nMap; i++ {
+			if m.map_task_assigned[i] == 2 {
+				count++
+			} else {
 				break
 			}
 		}
-	}
+		// if all map task completed then mark map as completed
+		if count == m.nMap {
+			m.mapComplete = true
+		}
 
-	if count == 3 {
-		reply.Type = 3
+	} else if args.Type == 2 {
+		//Reduce task
+		//check if rask compltedted in desired time
+		//if not set reduce task unassigned
+		reduceTaskIndex := args.Index
+		t1 := time.Now()
+		t2 := m.reduceTaskTime[reduceTaskIndex]
+		diff := t1.Sub(t2).Seconds()
+		currStatus := m.reduce_task_assigned[reduceTaskIndex]
+
+		if currStatus != 2 {
+			if diff <= 10 {
+				m.reduce_task_assigned[reduceTaskIndex] = 2
+				reply.Status = 1
+			} else {
+				m.reduce_task_assigned[reduceTaskIndex] = 0
+			}
+		} else {
+			//task alteady done
+			reply.Status = 1
+		}
+
+		//check if it was the last reduce task
+		count := 0
+		for i := 0; i < m.nReduce; i++ {
+			if m.reduce_task_assigned[i] == 2 {
+				count++
+			} else {
+				break
+			}
+		}
+
+		if count == m.nReduce {
+			m.reduceComplete = true
+		}
+
 	}
 
 	return nil
@@ -93,7 +183,7 @@ func (m *Master) server() {
 // if the entire job has finished.
 //
 func (m *Master) Done() bool {
-	ret := false
+	ret := m.mapComplete && m.reduceComplete
 
 	// Your code here.
 
@@ -112,8 +202,12 @@ func MakeMaster(files []string, nReduce int) *Master {
 	m.file_names = files
 	m.nReduce = nReduce
 	m.nMap = len(files)
-	m.map_task_assigned = make([]bool, len(files))
-	m.reduce_task_assigned = make([]bool, nReduce)
+	m.map_task_assigned = make([]int, len(files))
+	m.mapTaskTime = make([]time.Time, len(files))
+	m.reduce_task_assigned = make([]int, nReduce)
+	m.reduceTaskTime = make([]time.Time, nReduce)
+	m.mapComplete = false
+	m.reduceComplete = false
 
 	m.server()
 	return &m
