@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"time"
 )
 
 //
@@ -76,6 +77,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			//	fmt.Printf("MAP-REDUCE executed SUCCESSFULY")
 			break
 		}
+		time.Sleep(2 * time.Second)
 
 	}
 
@@ -101,6 +103,7 @@ func callTaskExecuted(Type int, Index int) (Status, error) {
 		if reply.Status == 1 {
 			break
 		}
+		time.Sleep(2 * time.Second)
 	}
 
 	return reply, nil

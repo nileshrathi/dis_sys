@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -25,18 +26,23 @@ type Master struct {
 	reduceComplete       bool
 	mapTaskTime          []time.Time
 	reduceTaskTime       []time.Time
+	mutex                sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
 
 //yellow line hatao
 func (m *Master) GetArgs(args *ReqTaskArgs, reply *ReplyTaskArgs) error {
-
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	if !m.mapComplete {
 		//get the map task
 		for i := 0; i < m.nMap; i++ {
 			t1 := time.Now()
 			if m.map_task_assigned[i] == 0 || (m.map_task_assigned[i] == 1 && t1.Sub(m.mapTaskTime[i]).Seconds() > 10) {
+				// if m.map_task_assigned[i] == 1 && t1.Sub(m.mapTaskTime[i]).Seconds() > 10 {
+				// 	fmt.Printf("worker dead for long period of time\n")
+				// }
 				m.map_task_assigned[i] = 1
 				m.mapTaskTime[i] = time.Now()
 				reply.Type = 1
@@ -81,11 +87,12 @@ func (m *Master) GetArgs(args *ReqTaskArgs, reply *ReplyTaskArgs) error {
 	// 	}
 	// }
 
-	return nil
 }
 
 //need to handle concurrent calls to TaskComplete ans get Args
 func (m *Master) TaskComplete(args *TaskExecuted, reply *Status) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	if args.Type == 1 {
 		//Map task
 		//check if task is completed in desired time
